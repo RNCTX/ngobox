@@ -45,9 +45,9 @@ is generated dynamically so will probably have to dig into the phpList API to ge
 
 **Short answer:** 
 
-AWS API keys with access given to fully manage SES, a dedicated email account to catch mail bounces, and another email account to send
-notifications to the server admin. A server. A subdomain that isn't your main website. Make something like admin.yoursite.com or backend.yoursite.com. 
-These are internal staff-only tools, not meant to be linked to the public from your main website.
+AWS API keys with access given to fully manage SES, a dedicated email account to catch mail bounces, and another email account to send notifications to the server admin. A server. A subdomain that isn't your main website. Make something like admin.yoursite.com or backend.yoursite.com. These are internal staff-only tools, not meant to be linked to the public from your main website.
+
+The ansible playbooks presume you log in as the user "ubuntu" via public key auth and don't need a password for sudo (default on AWS EC2 instances).  For other methods you can make some <a href="https://github.com/RNCTX/ngobox/wiki/Installing-if-you-need-a-password-for-ssh,-sudo" target="_blank">small changes</a> to the main playbook file to accommodate other setups if needed.
 
 **Longer answer if you're starting from scratch:**
 

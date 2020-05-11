@@ -3,6 +3,8 @@
   vars:
     ansible_python_interpreter: /usr/bin/python3
   remote_user: ubuntu
+  #ansible_ssh_pass: mypassword
+  #ansible_become_pass: mypassword
   become: true
   gather_facts: false
   module_defaults:
