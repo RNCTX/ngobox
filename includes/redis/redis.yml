@@ -1,0 +1,69 @@
+    - name: Set redis config variables...
+      replace:
+        path: /etc/redis/redis.conf
+        after: "{{ item.after }}"
+        regexp: "{{ item.regexp }}"
+        replace: "{{ item.replace }}"
+        backup: "{{ true if index == 0 else false }}"
+      loop:
+        - { after: 'will not listen on a TCP socket.', regexp: '^port\s[0-9]{1,5}$', replace: 'port 0' }
+        - { after: '# Unix socket.', regexp: '^(#.*unixsocket\s*?)(/.*?redis/)(redis-server.sock)$', replace: 'unixsocket \2\3' }
+        - { after: 'redis-server.sock', regexp: '^(#.*unixsocketperm\s*?)([0-9]{1,4})$', replace: 'unixsocketperm 0770' }
+        - { after: 'CLIENTS', regexp: '^(#.*maxclients\s*?)([0-9]{1,5})$', replace: 'maxclients 512' }
+        - { after: 'MEMORY MANAGEMENT', regexp: '^(#\s*?maxmemory\s*?)(<bytes>)$', replace: "maxmemory {{ (ansible_memtotal_mb|int * 0.25) | round | int }}MB" }
+        - { after: 'SNAPSHOTTING', regexp: '^(.?stop.writes.on.bgsave.error).*?$', replace: '\1 no' }
+      loop_control:
+        index_var: index
+      register: redis_config
+
+    - name: Set redis sysctl.conf values
+      lineinfile:
+        create: true
+        path: /etc/sysctl.conf
+        insertafter: EOF
+        line: "{{ item.option }} = {{ item.value }}"
+        backup: "{{ true if index == 0 else false }}"
+      loop:
+        - { option: 'net.core.somaxconn', value: '512' }
+        - { option: 'vm.overcommit_memory', value: '1' }
+      loop_control:
+        index_var: index
+      register: redis_sysctl
+
+    - name: Setup a systemd service for redis to disable transparent huge pages...
+      template:
+        src: templates/transparent-huge-pages.service.j2
+        dest: /etc/systemd/system/transparent-huge-pages.service
+      when: redis_sysctl.changed == true
+    
+    - name: Set redis service to restart on failure...
+      lineinfile:
+        create: false
+        path: /etc/systemd/system/redis.service
+        insertafter: '^Restart=.*?$'
+        line: "{{ item.option }}={{ item.value }}"
+      loop:
+        - { option: 'RestartSec', value: '3' }
+        - { option: 'StartLimitIntervalSec', value: '0' }
+      when: redis_sysctl.changed == true
+
+    - name: Fix redis service to work with socket...
+      ini_file:
+        dest: /etc/systemd/system/redis.service
+        section: Service
+        option: "ExecStop"
+        value: '/usr/bin/redis-cli -s /run/redis/redis-server.sock SHUTDOWN NOSAVE'
+        create: false
+      when: redis_config.changed == true
+
+    - name: Add www user to redis group...
+      command: 'usermod -aG redis www-data'
+
+    - name: Change redis socket folder to group-writable for nextcloud access...
+      file:
+        path: /var/run/redis
+        state: directory
+        owner: redis
+        group: redis
+        mode: 0770
+      when: redis_config.changed == true

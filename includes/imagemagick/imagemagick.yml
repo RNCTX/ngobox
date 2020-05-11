@@ -1,0 +1,14 @@
+   - name: Set ImagMagick policies to allow read and write of PS, EPI, PDF, and XPS files...
+     xml:
+       path: "/etc/{{ ans_imagemagick.stdout }}/policy.xml"
+       xpath: "{{ item.xpath }}"
+       attribute: "{{ item.attribute }}"
+       value: "{{ item.value }}"
+       backup: "{{ true if index == 0 else false }}"
+     loop:
+       - { xpath: '/policymap/policy[@domain="coder" and @pattern="PS"]', attribute: 'rights', value: 'read|write' }
+       - { xpath: '/policymap/policy[@domain="coder" and @pattern="EPS"]', attribute: 'rights', value: 'read|write' }
+       - { xpath: '/policymap/policy[@domain="coder" and @pattern="PDF"]', attribute: 'rights', value: 'read|write' }
+       - { xpath: '/policymap/policy[@domain="coder" and @pattern="XPS"]', attribute: 'rights', value: 'read|write' }
+     loop_control:
+       index_var: index

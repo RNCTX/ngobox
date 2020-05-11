@@ -1,0 +1,55 @@
+    - name: Set Collabora SSL check to disabled, terminate encryption at Nginx, and listen only on localhost...
+      xml:
+        path: "/etc/loolwsd/loolwsd.xml"
+        xpath: "{{ item.xpath }}"
+        value: "{{ item.value }}"
+        backup: "{{ true if index == 0 else false }}"
+      loop:
+        - { xpath: '/config/ssl/enable', value: 'false' }
+        - { xpath: '/config/ssl/termination', value: 'true' }
+        - { xpath: '/config/net/listen', value: 'any' }
+      loop_control:
+        index_var: index
+
+    - name: Check Collabora config for presence of server hostname...
+      vars:
+        loolwsd_hostname: "{{ ansible_fqdn | regex_escape() }}"
+      xml:
+        path: "/etc/loolwsd/loolwsd.xml"
+        xpath: '/config/storage/wopi/host[text()="{{ loolwsd_hostname }}"]'
+      check_mode: true
+      register: loolwsd_hostname_present
+
+    - name: Set Collabora SSL to allow connections from server hostname...
+      vars:
+        loolwsd_hostname: "{{ ansible_fqdn | regex_escape() }}"
+      xml:
+        path: "/etc/loolwsd/loolwsd.xml"
+        xpath: '/config/storage/wopi/host[text()="localhost"]'
+        insertafter: true
+        pretty_print: true
+        add_children: 
+          - host: "{{ loolwsd_hostname }}"
+      when: loolwsd_hostname_present.changed == true
+
+    - name: Add Collabora default properties for new URL host allow element....
+      vars:
+        loolwsd_hostname: "{{ ansible_fqdn | regex_escape() }}"
+      xml:
+        path: "/etc/loolwsd/loolwsd.xml"
+        xpath: '/config/storage/wopi/host[text()="{{ loolwsd_hostname }}"]'
+        attribute: "{{ item.attribute }}"
+        value: "{{ item.value }}"
+      loop:
+        - { attribute: 'desc', value: 'Regex pattern of hostname to allow or deny.' }
+        - { attribute: 'allow', value: 'true' }
+
+    - name: Set Collabora service to restart on failure...
+      lineinfile:
+        create: false
+        path: "/etc/systemd/system/multi-user.target.wants/loolwsd.service"
+        insertafter: '^Restart=.*?$'
+        line: "{{ item.option }}={{ item.value }}"
+      loop:
+        - { option: 'RestartSec', value: '3' }
+        - { option: 'StartLimitIntervalSec', value: '0' }

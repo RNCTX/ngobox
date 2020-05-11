@@ -1,0 +1,337 @@
+---
+- hosts: all
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+  remote_user: ubuntu
+  become: true
+  gather_facts: false
+  module_defaults:
+    apt:
+      force_apt_get: true
+
+  tasks:
+
+    - name: Update remote server hosts file...
+      vars:
+        domain_name: "{{ lookup('env','TARGET_HOSTNAME') }}"
+        host_name: "{{ lookup('env','TARGET_HOSTNAME') | regex_replace('\\..*?$') }}"
+      replace:
+        path: /etc/hosts
+        regexp: '^(127\.0\.1\.1).*?$'
+        replace: '\1 {{ domain_name }} {{ host_name }}'
+        backup: true
+
+    - name: Ensure that hostname file exists...
+      file:
+        path: /etc/hostname
+        state: touch
+
+    - name: Update remote server hostname file...
+      vars:
+        host_name: "{{ lookup('env','TARGET_HOSTNAME') | regex_replace('\\..*?$') }}"
+      replace:
+        path: /etc/hostname
+        regexp: '^.*?$'
+        replace: "{{ host_name }}"
+        backup: true
+
+    - set_fact:
+        ans_colaptkey: "0C54D189F4BA284D"
+        ans_couchaptkey: "8756C4F765C9AC3CB6B85D62379CE192D401AB61"
+        ans_couchrepo: 'deb https://apache.bintray.com/couchdb-deb bionic main'
+        ans_colrepo: 'deb https://www.collaboraoffice.com/repos/CollaboraOnline/CODE-ubuntu1804 ./'
+        ans_mailaddr: "{{ lookup('env','TARGET_EMAILADDR') }}"
+        ans_maildomain: "{{ lookup('env','TARGET_EMAILADDR') | regex_replace('[A-Za-z0-9._%+-]+@') }}"
+        ans_bounceaddr: "{{ lookup('env','TARGET_BOUNCEADDR') }}"
+        ans_bouncedomain: "{{ lookup('env','TARGET_BOUNCEADDR') | regex_replace('[A-Za-z0-9._%+-]+@') }}"
+        ans_awskeyid: "{{ lookup('env','TARGET_AWSKEYID') }}"
+        ans_awskeysecret: "{{ lookup('env','TARGET_AWSKEYSECR') }}"
+        ans_awsregion: "{{ lookup('env','TARGET_AWSREGION') }}"
+        ans_bouncepopssl: "{{ lookup('env', 'BOUNCE_POPSSL') }}"
+
+    - set_fact:
+        ans_mailsmtp: "{{ lookup('env', 'TARGET_SMTP') }}"
+        ans_mailport: "{{ lookup('env', 'TARGET_SMTPPORT') }}"
+        ans_mailtls: "{{ lookup('env', 'TARGET_SMTPTLS') }}"
+        ans_mailstls: "{{ lookup('env', 'TARGET_STLS') }}"
+        ans_mailssl: "{{ lookup('env', 'TARGET_SMTPSSL') }}"
+      when: (ans_maildomain != "gmail.com") and
+            (ans_maildomain != "yahoo.com") and
+            (ans_maildomain != "hotmail.com") and
+            (ans_maildomain != "outlook.com") and
+            (ans_maildomain != "aol.com") and
+            (ans_maildomain != "mac.com") and
+            (ans_maildomain != "me.com") and
+            (ans_maildomain != "icloud.com")
+
+    - set_fact:
+        ans_bouncepop: "{{ lookup('env', 'BOUNCE_POP') }}"
+        ans_bounceport: "{{ lookup('env', 'BOUNCE_POPPORT') }}"
+        ans_bouncessl: "ssl"
+      when: (ans_bouncedomain != "gmail.com") and
+            (ans_bouncedomain != "yahoo.com") and
+            (ans_bouncedomain != "hotmail.com") and
+            (ans_bouncedomain != "outlook.com") and
+            (ans_bouncedomain != "aol.com") and
+            (ans_bouncepopssl == "y")
+
+    - set_fact:
+        ans_bouncepop: "{{ lookup('env', 'BOUNCE_POP') }}"
+        ans_bounceport: "{{ lookup('env', 'BOUNCE_POPPORT') }}"
+        ans_bouncessl: "notls"
+      when: (ans_bouncedomain != "gmail.com") and
+            (ans_bouncedomain != "yahoo.com") and
+            (ans_bouncedomain != "hotmail.com") and
+            (ans_bouncedomain != "outlook.com") and
+            (ans_bouncedomain != "aol.com") and
+            (ans_bouncepopssl == "n")
+
+    - name: Gathering facts...
+      setup:
+
+    - name: Check to see if dhparam.pem has been generated...
+      stat: 
+        path: /etc/ssl/dhparam.pem
+      register: dhparam_present
+
+    - debug:
+        msg: |
+          "This package generates a new 4096 bit SSL key to make website SSL keys with for increased security. This process can take a long time, so the task will run asynchronously and wait for itself to complete before finishing the server configuration by generating new SSL keys. It is possible, mathematically speaking, for a nation-state level of computing power to compromise the default 1024 or 2048 bit key that ships with the OpenSSL encryption libraries included in most operating systems. Please do not close the terminal window you started this script in, minimize it and let it finish. If the process fails, you will have an invalid (and insecure) /etc/ssl/dhparams.pem file on your server. Delete it manually before running this installation script again with the commands below...
+          ssh server.ip.add.ress
+          sudo rm -rf /etc/ssl/dhparam.pem"
+      when: dhparam_present.stat.exists == False
+
+    - name: sleep for 30 seconds to let the user read the above message...
+      wait_for:
+        timeout: 30
+      delegate_to: "{{ ansible_default_ipv4.address }}"
+      when: dhparam_present.stat.exists == False
+
+    - name: Generate new dhparam key asynchronously...
+      openssl_dhparam:
+        path: /etc/ssl/dhparam.pem
+        force: false
+        size: 4096
+        mode: 0644
+        owner: root
+      async: 86400
+      poll: 0
+      register: dhparam_status
+
+    - name: Add apt keys for new repositories...
+      apt_key:
+        keyserver: keyserver.ubuntu.com
+        id: "{{ item.aptkey }}"
+      loop:
+        - { aptkey: "{{ ans_colaptkey }}"}
+        - { aptkey: "{{ ans_couchaptkey }}" }
+
+    - name: Add new repositories to apt sources...
+      apt_repository:
+        repo: "{{ item.repolink }}"
+        state: present
+        filename: "{{ item.file }}"
+      loop:
+        - { repolink: "{{ ans_colrepo }}", file: collabora }
+        - { repolink: "{{ ans_couchrepo }}", file: couchdb }
+
+    - name: Install base requirements...
+      apt: 
+        name: "{{ item.name }}" 
+        update_cache: "{{ true if index == 0 else false }}"
+      loop: 
+        - { name: 'curl' }
+        - { name: 'gnupg2' }
+        - { name: 'git' }
+        - { name: 'lsb-release' }
+        - { name: 'ssl-cert' }
+        - { name: 'ca-certificates' }
+        - { name: 'debconf-utils' }
+        - { name: 'fcgiwrap' }
+        - { name: 'apt-transport-https' }
+        - { name: 'tree' }
+        - { name: 'locate' }
+        - { name: 'software-properties-common' }
+        - { name: 'dirmngr' }
+        - { name: 'screen' }
+        - { name: 'htop' }
+        - { name: 'net-tools' }
+        - { name: 'zip' }
+        - { name: 'unzip' }
+        - { name: 'ffmpeg' }
+        - { name: 'ghostscript' }
+        - { name: 'loolwsd' }
+        - { name: 'code-brand' }
+        - { name: 'collaboraoffice6.2-dict-en' }
+        - { name: 'hunspell-en-us' }
+        - { name: 'msmtp' }
+        - { name: 'msmtp-mta' }
+        - { name: 'bsd-mailx' }
+        - { name: 'apache2-utils' }
+        - { name: 'git' }
+        - { name: 'gcc' }
+        - { name: 'make' }
+        - { name: 'autoconf' }
+        - { name: 'automake' }
+        - { name: 'pkg-config' }
+        - { name: 'socat' }
+        - { name: 'uuid-dev' }
+        - { name: 'zlib1g-dev' }
+      loop_control:
+        index_var: index
+
+    - name: Install Nginx...
+      apt: 
+        name: "{{ item.name }}" 
+        update_cache: false
+      loop: 
+        - { name: 'nginx-common' }
+
+    - name: Install MariaDB...
+      apt: 
+        name: mariadb-server
+        update_cache: false
+
+    - name: Install Redis...
+      apt:
+        name: redis-server
+        update_cache: false
+
+    - name: Install CouchDB...
+      apt:
+        name: couchdb
+        update_cache: false
+
+    - name: Install Apticron...
+      apt:
+        name: apticron
+        update_cache: false
+
+    - name: Install base Python modules
+      apt: 
+        name: "{{ item.name }}" 
+        update_cache: false
+      loop: 
+        - { name: 'python3-pip' }
+        - { name: 'python3-setuptools' }
+        - { name: 'python3-wheel' }
+        - { name: 'python3-lxml' }
+        - { name: 'python3-psycopg2' }
+        - { name: 'python3-pymysql' }
+
+    - name: Install PHP and modules...
+      apt: 
+        name: "{{ item.name }}" 
+        update_cache: false
+      loop: 
+        - { name: 'php-common' }
+        - { name: 'php-fpm' }
+        - { name: 'php-gd' }
+        - { name: 'php-mysql' }
+        - { name: 'php-pgsql' }
+        - { name: 'php-curl' }
+        - { name: 'php-xml' }
+        - { name: 'php-zip' }
+        - { name: 'php-intl' }
+        - { name: 'php-mbstring' }
+        - { name: 'php-json' }
+        - { name: 'php-bz2' }
+        - { name: 'php-ldap' }
+        - { name: 'imagemagick' }
+        - { name: 'php-imagick' }
+        - { name: 'php-redis' }
+        - { name: 'php-smbclient' }
+
+    - name: Get time zone...
+      command: "cat /etc/timezone"
+      register: ans_timezone
+
+    - name: Get installed PHP version...
+      shell: "/bin/ls /etc/php | awk '{print $1}'"
+      register: ans_phpver
+
+    - name: Get installed MySQL server version...
+      shell: "/usr/sbin/mysqld --version | awk '{print $3}'"
+      register: ans_sqlver
+
+    - name: Get installed ImageMagick version...
+      shell: "/bin/ls /etc | grep ImageMagick"
+      register: ans_imagemagick
+
+    - name: Detected values are...
+      debug:
+        msg: "Server time zone: {{ ans_timezone.stdout }}, number of CPUs: {{ ansible_processor_vcpus }}, Memory in megabytes: {{ ansible_memtotal_mb }}, IP address: {{ ansible_default_ipv4.address }}, PHP version: {{ ans_phpver.stdout }}, MySQL version: {{ ans_sqlver.stdout }}, ImageMagick version: {{ ans_imagemagick.stdout }}, and the admin email domain is {{ ans_maildomain }}."
+     
+    - name: Set up MySQL...
+      import_tasks: mariadb/mariadb.yml
+
+    - name: Set up Collabora office document collaboration server...
+      import_tasks: loolwsd/loolwsd.yml
+
+    - name: Set up ImageMagick...
+      import_tasks: imagemagick/imagemagick.yml
+
+    - name: Set up msmtp for server email notifications...
+      import_tasks: msmtp/msmtp.yml
+
+    - name: Set up nginx...
+      import_tasks: nginx/nginx.yml
+
+    - name: Set up php...
+      import_tasks: php/php.yml
+
+    - name: Set up redis...
+      import_tasks: redis/redis.yml
+
+    - name: Set up acme client and issue SSL certificates...
+      import_tasks: acme/acme.yml
+
+    - name: Set up ufw firewall if the user wanted it...
+      vars:
+        ufw_question: "{{ lookup('env','UFW_ANSWER') }}"
+      import_tasks: ufw/ufw.yml
+      when: ufw_question == "y"
+
+    - name: Set up nodejs...
+      import_tasks: nodejs/nodejs.yml
+
+    - name: Set up nodered...
+      import_tasks: nodered/nodered.yml
+
+    - name: Set up rssbridge...
+      import_tasks: rssbridge/rssbridge.yml
+
+    - name: Set up nextcloud...
+      import_tasks: nextcloud/nextcloud.yml
+
+    - name: Set up phplist...
+      import_tasks: phplist/phplist.yml
+
+    - name: Set up apticron...
+      import_tasks: apticron/apticron.yml
+
+    - name: Wait until the dhparam key is computed before continuing...
+      async_status:
+        jid: "{{ dhparam_status.ansible_job_id }}"
+      register: dhparam_result
+      until: dhparam_result.finished
+      delay: 30
+      retries: 2880
+
+    - name: Update systemd services and restart changed ones...
+      systemd:
+        name: "{{ item.service }}"
+        daemon_reload: "{{ true if index == 0 else false }}"
+        enabled: true
+        state: restarted
+      loop:
+        - { service: 'php{{ ans_phpver.stdout }}-fpm' }
+        - { service: 'redis-server' }
+        - { service: 'transparent-huge-pages' }
+        - { service: 'loolwsd' }
+        - { service: 'nginx' }
+        - { service: 'nodered' }
+        - { service: 'couchdb' }
+        - { service: 'mysql' }
+      loop_control:
+        index_var: index

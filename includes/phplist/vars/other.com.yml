@@ -1,0 +1,7 @@
+pop_srv: "{{ ans_bouncepop }}"
+pop_port: "{{ ans_bounceport }}/pop3/{{ ans_bouncessl }}"
+pop_user: "{{ ans_mailaddr }}"
+pop_pass: "{{ lookup('env','TARGET_BOUNCEPASS') }}"
+db_name: "phplist"
+db_username: "phplistuser"
+db_password: "{{ lookup('password', '~/ansible_phplist_db-password-for_phplistuser.txt length=32 chars=ascii_letters,digits') }}"

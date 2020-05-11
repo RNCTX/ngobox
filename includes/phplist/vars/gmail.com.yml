@@ -1,0 +1,7 @@
+pop_srv: "pop.gmail.com"
+pop_port: "995/pop3/ssl"
+pop_user: "{{ ans_mailaddr }}"
+pop_pass: "{{ lookup('env','TARGET_EMAILPASS') }}"
+db_name: "phplist"
+db_username: "phplistuser"
+db_password: "{{ lookup('password', '~/ansible_phplist_db-password-for_phplistuser.txt length=32 chars=ascii_letters,digits') }}"

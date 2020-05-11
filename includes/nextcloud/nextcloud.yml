@@ -1,0 +1,250 @@
+    - name: Check if nextcloud source files exist in /usr/local/src...
+      find:
+        paths: /usr/local/src
+        patterns: 'nextcloud.latest.tar.bz2'
+      register: nextcloud_src_check
+
+    - name: Download nextcloud if it doesn't exist in /usr/src...
+      get_url:
+        url: https://download.nextcloud.com/server/releases/latest.tar.bz2
+        dest: /usr/local/src/nextcloud.latest.tar.bz2
+        mode: 0664
+      when: (nextcloud_src_check.changed == true) or
+            (nextcloud_src_check.matched == 0)
+
+    - name: Check to see if nextcloud files already exist on webserver...
+      stat:
+        path: /var/www/nextcloud/config/config.php
+      check_mode: true
+      register: nextcloud_install
+
+    - name: Unzip nextcloud source files if a fresh download...
+      unarchive:
+        src: /usr/local/src/nextcloud.latest.tar.bz2
+        dest: /var/www
+        remote_src: true
+        owner: www-data
+        group: www-data
+        mode: 0644
+      when: nextcloud_install.stat.exists == false
+
+    - name: Make sure nextcloud database exists...
+      mysql_db:
+        login_user: root
+        login_password: "{{ lookup('password', '~/ansible_maria_db-password-for_root.txt length=32 chars=ascii_letters,digits') }}"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        name: nextcloud
+        state: present
+      register: nextcloud_db_check
+
+    - name: Ensure all nextcloud directory files have proper permissions for install...
+      file:
+        path: "{{ item.path }}"
+        state: directory
+        recurse: "{{ item.recurse }}"
+        owner: www-data
+        group: www-data
+        mode: 0755
+      loop:
+        - { path: '/var/www/nextcloud', recurse: 'true' }
+        - { path: '/var/nc_data', recurse: 'true' }
+
+    - name: Install nextcloud...
+      become_user: www-data
+      shell: 'php occ maintenance:install \
+        --database "mysql" \
+        --database-host "localhost:/var/run/mysqld/mysqld.sock" \
+        --database-name "nextcloud" \
+        --database-user "nextclouduser" \
+        --database-pass "{{ lookup("password", "~/ansible_nextcloud_db-password-for_nextclouduser.txt length=32 chars=ascii_letters,digits") }}" \
+        --admin-user "admin" \
+        --admin-pass "{{ lookup("password", "~/ansible_defaul-admin-password-for_admin.txt length=32 chars=ascii_letters,digits") }}" \
+        --data-dir "/var/nc_data"'
+      args:
+        chdir: /var/www/nextcloud
+      when: (nextcloud_db_check.changed == false) and
+            (nextcloud_install.stat.exists == false)
+      no_log: true
+
+    - name: Set nextcloud domain if a fresh install...
+      become_user: www-data
+      shell: 'php occ config:system:set \
+        trusted_domains 0 --value={{ ansible_fqdn }}'
+      args:
+        chdir: /var/www/nextcloud
+      when: (nextcloud_db_check.changed == false) and
+            (nextcloud_install.stat.exists == false)
+
+    - name: Enable nextcloud contacts, deck, document collaboration, external sites, mail, maps, and talk if a fresh install ...
+      become_user: www-data
+      shell: 'php occ app:enable {{ item.app }}'
+      args:
+        chdir: /var/www/nextcloud
+      loop:
+        - { app: 'maps' }
+        - { app: 'deck' }
+        - { app: 'contacts' }
+        - { app: 'external' }
+        - { app: 'twofactor_totp' }
+        - { app: 'calendar' }
+        - { app: 'admin_audit' }
+        - { app: 'files_pdfviewer' }
+        - { app: 'news' }
+        - { app: 'files_rightclick' }
+        - { app: 'richdocuments' }
+      when: (nextcloud_db_check.changed == false) and
+            (nextcloud_install.stat.exists == false)
+
+    - name: Disable nextcloud recommendations and survey apps ...
+      become_user: www-data
+      shell: 'php occ app:disable {{ item.app }}'
+      args:
+        chdir: /var/www/nextcloud
+      loop:
+        - { app: 'recommendations' }
+        - { app: 'survey' }
+      when: (nextcloud_db_check.changed == false) and
+            (nextcloud_install.stat.exists == false)
+
+    - name: Check nextcloud config status...
+      shell: 'cat /var/www/nextcloud/config/config.php'
+      register: nextcloud_config
+
+    - name: Finish nextcloud boolean and integer config values if a fresh install...
+      lineinfile:
+        path: /var/www/nextcloud/config/config.php
+        insertbefore: '^\);$'
+        line: "  {{ item.option }} => {{ item.value }},"
+        backup: "{{ true if index == 0 else false }}"
+      loop:
+        - { option: "'activity_expire_days'", value: '14' }
+        - { option: "'auth.bruteforce.protection.enabled'", value: 'true' }
+        - { option: "'cron_log'", value: 'true' }
+        - { option: "'enable_previews'", value: 'true' }
+        - { option: "'filesystem_check_changes'", value: '1' }
+        - { option: "'filelocking.enabled'", value: 'true' }
+        - { option: "'loglevel'", value: '2' }
+        - { option: "'maintenance'", value: 'false' }
+        - { option: "'preview_max_x'", value: '1024' }
+        - { option: "'preview_max_y'", value: '768' }
+        - { option: "'preview_max_scale_factor'", value: '1' }
+        - { option: "'quota_include_external_storage'", value: 'false' }
+      loop_control:
+        index_var: index
+      when: nextcloud_config.stdout.find('quota_include_external_storage') == -1
+  
+    - name: Finish nextcloud string config values if a fresh install...
+      lineinfile:
+        path: /var/www/nextcloud/config/config.php
+        insertbefore: '^\);$'
+        line: "  {{ item.option }} => {{ item.value }},"
+      loop:
+        - { option: "'logfile'", value: "'/var/log/nextcloud.log'" }
+        - { option: "'logtimezone'", value: "'{{ ans_timezone.stdout}}'" }
+        - { option: "'memcache.locking'", value: "'\\OC\\Memcache\\Redis'" }
+        - { option: "'share_folder'", value: "'/var/nc_share'" }
+        - { option: "'trashbin_retention_obligation'", value: "'auto, 7'" }
+        - { option: "'updater.release.channel'", value: "'stable'" }
+        - { option: "'overwriteprotocol'", value: "'https'" }
+        - { option: "'htaccess.RewriteBase'", value: "'/'" }
+      when: nextcloud_config.stdout.find('Redis') == -1
+
+    - name: Finish nextcloud array config values if a fresh install...
+      blockinfile:
+        path: /var/www/nextcloud/config/config.php
+        insertbefore: '^\);$'
+        marker: ''
+        block: |2
+            'enabledPreviewProviders' =>
+            array (
+              0 => 'OC\Preview\PNG',
+              1 => 'OC\Preview\JPEG',
+              2 => 'OC\Preview\GIF',
+              3 => 'OC\Preview\BMP',
+              4 => 'OC\Preview\XBitmap',
+              5 => 'OC\Preview\Movie',
+              6 => 'OC\Preview\PDF',
+              7 => 'OC\Preview\MP3',
+              8 => 'OC\Preview\TXT',
+              9 => 'OC\Preview\MarkDown',
+            ),
+            'blacklisted_files' =>
+            array (
+              0 => '.htaccess',
+              1 => 'Thumbs.db',
+              2 => 'thumbs.db',
+            ),
+            'redis' =>
+            array (
+              'host' => '/var/run/redis/redis-server.sock',
+              'dbindex' => 0,
+              'port' => 0,
+              'timeout' => 0.0,
+            ),
+      when: nextcloud_config.stdout.find('PreviewProviders') == -1
+
+    - name: Set nextcloud domain for php cli if a fresh install...
+      become_user: www-data
+      shell: 'php occ config:system:set \
+        overwrite.cli.url --value={{ ansible_fqdn }}'
+      args:
+        chdir: /var/www/nextcloud
+
+    - name: Remove any blank lines in nextcloud config...
+      lineinfile :
+        path: /var/www/nextcloud/config/config.php
+        state: absent
+        regexp: '^$'
+
+    - name: Get English-USA docuemnt templates for nextcloud online editor...
+      get_url:
+        url: "{{ item.link }}"
+        dest: "{{ item.destination }}"
+        mode: 0644
+        owner: www-data
+        group: www-data
+      loop:
+        - { link: 'https://github.com/RNCTX/english-usa-libreoffice-templates/raw/master/template.odp', destination: '/var/www/nextcloud/apps/richdocuments/assets/template.odp'}
+        - { link: 'https://github.com/RNCTX/english-usa-libreoffice-templates/raw/master/template.ods', destination: '/var/www/nextcloud/apps/richdocuments/assets/template.ods'}
+        - { link: 'https://github.com/RNCTX/english-usa-libreoffice-templates/raw/master/template.odt', destination: '/var/www/nextcloud/apps/richdocuments/assets/template.odt'}
+
+    - name: Copy English-USA docuemnt templates for nextcloud to core templates folder...
+      copy:
+        remote_src: true
+        src: "{{ item.source }}"
+        dest: "{{ item.destination }}"
+        mode: 0644
+        owner: www-data
+        group: www-data
+      loop:
+        - { source: '/var/www/nextcloud/apps/richdocuments/assets/template.odp', destination: '/var/www/nextcloud/core/templates/filetemplates/template.odp'}
+        - { source: '/var/www/nextcloud/apps/richdocuments/assets/template.odt', destination: '/var/www/nextcloud/core/templates/filetemplates/template.odt'}
+        - { source: '/var/www/nextcloud/apps/richdocuments/assets/template.ods', destination: '/var/www/nextcloud/core/templates/filetemplates/template.ods'}
+
+    - name: Create a cron job for nextcloud recurring tasks...
+      cron:
+        name: nextcloud
+        minute: "*/5"
+        user: www-data
+        job: "/usr/bin/php -f /var/www/nextcloud/cron.php > /dev/null 2>&1"
+        cron_file: nextcloud
+      register: nextcloud_cron
+
+    - name: Change nextcloud recurring task interface to cron...
+      become_user: www-data
+      shell: 'php occ background:cron'
+      args:
+        chdir: /var/www/nextcloud
+      when: nextcloud_cron.changed == true
+
+    - name: Enable any missing nextcloud database indices if a fresh install...
+      become_user: www-data
+      shell: 'php occ db:add-missing-indices'
+      args:
+        chdir: /var/www/nextcloud
+
+    - name: Enable bigint on nextcloud database file cache tables if a fresh install...
+      become_user: www-data
+      shell: 'php occ db:convert-filecache-bigint --no-interaction'
+      args:
+        chdir: /var/www/nextcloud

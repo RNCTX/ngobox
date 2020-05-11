@@ -1,0 +1,40 @@
+<?php
+$database_socket = '/var/run/mysqld/mysqld.sock';
+$database_name = '{{ db_name }}';
+$database_user = '{{ db_username }}';
+$database_password = '{{ db_password }}';
+$table_prefix = '{{ db_name }}_';
+$usertable_prefix = '{{ db_name }}_user_';
+$bounce_protocol = 'pop';
+$bounce_mailbox_host = '{{ pop_srv }}';
+$bounce_mailbox_user = '{{ pop_user }}';
+$bounce_mailbox_password = '{{ pop_pass }}';
+$bounce_mailbox_purge = 1;
+$bounce_mailbox_port = '{{ pop_port }}';
+$bounce_mailbox_purge_unprocessed = 1;
+$bounce_unsubscribe_threshold = 5;
+define('MANUALLY_PROCESS_BOUNCES', 0);
+define('HASH_ALGO', 'sha256');
+define('TEST', 0);
+$userhistory_systeminfo = array(
+    'HTTP_USER_AGENT',
+    'HTTP_REFERER',
+    'REMOTE_ADDR',
+);
+define('NOSTATSCOLLECTION', 1);
+define('PAGETEXTCREDITS', 1);
+define('EMAILTEXTCREDITS', 1);
+define('MANUALLY_PROCESS_QUEUE', 0);
+define('ALLOW_NON_LIST_SUBSCRIBE', 1);
+define('PREFERENCEPAGE_SHOW_PRIVATE_LISTS', 1);
+define('SHOW_SUBSCRIBELINK', true);
+define('SHOW_PREFERENCESLINK', true);
+define('SHOW_UNSUBSCRIBELINK', true);
+define('SHOW_LIST_OFALL_SUBSCRIBERS', false);
+define('USE_ADMIN_DETAILS_FOR_MESSAGES', 1);
+define('USERSPAGE_MAX', 5000);
+define('MIMETYPES_FILE', '/etc/nginx/mime.types');
+define('ALLOW_UPDATER', true);
+define('AWS_ACCESSKEYID', '{{ ans_awskeyid }}');
+define('AWS_SECRETKEY', '{{ ans_awskeysecret }}');
+define('AWS_POSTURL', 'https://email.{{ ans_awsregion }}.amazonaws.com/');
