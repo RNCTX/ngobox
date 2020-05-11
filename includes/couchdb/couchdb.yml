@@ -15,7 +15,6 @@
         backup: "{{ true if index == 0 else false }}"
       loop:
         - { section: 'chttpd', option: 'bind_address', value: '127.0.0.1' }
-        - { section: 'chttpd', option: 'require_valid_user', value: 'true' }
         - { section: 'couchdb', option: 'single_node', value: 'true' }
         - { section: 'admins', option: 'admin', value: '{{ default_password }}' }
       loop_control:
