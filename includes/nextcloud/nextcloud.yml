@@ -90,6 +90,7 @@
         - { app: 'admin_audit' }
         - { app: 'files_pdfviewer' }
         - { app: 'news' }
+        - { app: 'mail' }
         - { app: 'files_rightclick' }
         - { app: 'richdocuments' }
       when: (nextcloud_db_check.changed == false) and
@@ -103,6 +104,14 @@
       loop:
         - { app: 'recommendations' }
         - { app: 'survey' }
+      when: (nextcloud_db_check.changed == false) and
+            (nextcloud_install.stat.exists == false)
+
+    - name: Set links in nextcloud "external sites" to Nodered, CouchDB, and phpList...
+      become_user: www-data
+      shell: php occ config:app:set external sites --value='{"1":{"icon":"external.svg","lang":"","type":"link","device":"","groups":["admin"],"redirect":false,"id":1,"name":"CouchDB","url":"https:\/\/{{ ansible_fqdn }}\/couchdb\/_utils\/#login"},"2":{"icon":"external.svg","lang":"","type":"link","device":"","groups":["admin"],"redirect":false,"id":2,"name":"NodeRed","url":"https:\/\/{{ ansible_fqdn }}\/nodered"},"3":{"id":3,"name":"phpList","url":"https:\/\/{{ ansible_fqdn }}\/lists\/admin\/","lang":"","type":"link","device":"","icon":"external.svg","groups":["admin"],"redirect":false}}'
+      args:
+        chdir: /var/www/nextcloud
       when: (nextcloud_db_check.changed == false) and
             (nextcloud_install.stat.exists == false)
 
