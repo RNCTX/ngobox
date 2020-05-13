@@ -61,7 +61,7 @@ If you don't know what anything in the short answer is, read instructions for se
 4) cd to/the/folder you unzipped to
 5) type "sh ngobox" without the quotes, and fill in the blanks
 
-When it finishes, go to https://your.domain.com/lists/admin to complete the phpList install.  Everything else should be up and working if you go to the root of your subdomain.
+When it finishes, go to https://your.domain.com/ and you should be able to log in.  You'll want to log into phpList (in the menu at the top of the nextcloud page) right away since it will require you to click a link and set the admin password to complete its installation.
 
 If there are red notifications in your terminal, feel free to open an issue and paste the red error, I'll try to help you fix it.
 
