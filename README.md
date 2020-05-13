@@ -61,7 +61,7 @@ If you don't know what anything in the short answer is, read instructions for se
 4) cd to/the/folder you unzipped to
 5) type "sh ngobox" without the quotes, and fill in the blanks
 
-When it finishes, go to https://your.domain.com/ and you should be able to log in.  You'll want to log into phpList (in the menu at the top of the nextcloud page) right away since it will require you to click a link and set the admin password to complete its installation.
+When it finishes, go to https://your.domain.com/ and you should be able to log in. All of the web interfaces (nextcloud, couchdb admin, nodered, phpList admin, and rssbridge) have a username of `admin` and the same randomly generated password, listed in the `ansible_default-admin-password-for_admin.txt` file in your computer's (not the server's) home folder. You'll want to log into phpList (in the menu at the top of the nextcloud page) right away since it will require you to click a link and set the admin password to complete its installation.
 
 If there are red notifications in your terminal, feel free to open an issue and paste the red error, I'll try to help you fix it.
 

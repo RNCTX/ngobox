@@ -135,6 +135,9 @@ dmypy.json
 # Culled scripts
 culled/
 
+# Wiki images
+images/
+
 # Saved submission data
 form
 
