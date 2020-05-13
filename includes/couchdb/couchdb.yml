@@ -1,11 +1,10 @@
     - name: Install couchdb...
       apt:
         name: couchdb
-        update_cache: true
-
+        
     - name: Set couchdb admin password...
       vars:
-        default_password: "{{ lookup('password', '~/ansible_defaul-admin-password-for_admin.txt length=32 chars=ascii_letters,digits') }}"
+        default_password: "{{ lookup('password', '~/ansible_default-admin-password-for_admin.txt length=32 chars=ascii_letters,digits') }}"
       ini_file:
         dest: /opt/couchdb/etc/local.ini
         section: "{{ item.section }}"
@@ -20,8 +19,3 @@
       loop_control:
         index_var: index
       no_log: true
-
-    - name: Restart couchdb to auto-create initial dbs...
-      service:
-          name: couchdb
-          state: restarted

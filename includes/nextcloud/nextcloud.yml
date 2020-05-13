@@ -58,7 +58,7 @@
         --database-user "nextclouduser" \
         --database-pass "{{ lookup("password", "~/ansible_nextcloud_db-password-for_nextclouduser.txt length=32 chars=ascii_letters,digits") }}" \
         --admin-user "admin" \
-        --admin-pass "{{ lookup("password", "~/ansible_defaul-admin-password-for_admin.txt length=32 chars=ascii_letters,digits") }}" \
+        --admin-pass "{{ lookup("password", "~/ansible_default-admin-password-for_admin.txt length=32 chars=ascii_letters,digits") }}" \
         --data-dir "/var/nc_data"'
       args:
         chdir: /var/www/nextcloud
@@ -75,7 +75,7 @@
       when: (nextcloud_db_check.changed == false) and
             (nextcloud_install.stat.exists == false)
 
-    - name: Enable nextcloud contacts, deck, document collaboration, external sites, mail, maps, and talk if a fresh install ...
+    - name: Enable nextcloud contacts, calendar, tasks, document collaboration, external sites, mail, maps, news, PDF lib, and 2FA if a fresh install ...
       become_user: www-data
       shell: 'php occ app:enable {{ item.app }}'
       args:
@@ -115,6 +115,13 @@
       when: (nextcloud_db_check.changed == false) and
             (nextcloud_install.stat.exists == false)
 
+    - name: Set nextcloud domain for php cli if a fresh install...
+      become_user: www-data
+      shell: 'php occ config:system:set \
+        overwrite.cli.url --value={{ ansible_fqdn }}'
+      args:
+        chdir: /var/www/nextcloud
+
     - name: Check nextcloud config status...
       shell: 'cat /var/www/nextcloud/config/config.php'
       register: nextcloud_config
@@ -138,6 +145,7 @@
         - { option: "'preview_max_y'", value: '768' }
         - { option: "'preview_max_scale_factor'", value: '1' }
         - { option: "'quota_include_external_storage'", value: 'false' }
+        - { option: "'mysql.utf8mb4'", value: 'true' }
       loop_control:
         index_var: index
       when: nextcloud_config.stdout.find('quota_include_external_storage') == -1
@@ -149,7 +157,8 @@
         line: "  {{ item.option }} => {{ item.value }},"
       loop:
         - { option: "'logfile'", value: "'/var/log/nextcloud.log'" }
-        - { option: "'logtimezone'", value: "'{{ ans_timezone.stdout}}'" }
+        - { option: "'logtimezone'", value: "'America/Chicago'" }
+        - { option: "'memcache.local'", value: "'\\OC\\Memcache\\Redis'" }
         - { option: "'memcache.locking'", value: "'\\OC\\Memcache\\Redis'" }
         - { option: "'share_folder'", value: "'/var/nc_share'" }
         - { option: "'trashbin_retention_obligation'", value: "'auto, 7'" }
@@ -192,18 +201,18 @@
             ),
       when: nextcloud_config.stdout.find('PreviewProviders') == -1
 
-    - name: Set nextcloud domain for php cli if a fresh install...
-      become_user: www-data
-      shell: 'php occ config:system:set \
-        overwrite.cli.url --value={{ ansible_fqdn }}'
-      args:
-        chdir: /var/www/nextcloud
-
     - name: Remove any blank lines in nextcloud config...
-      lineinfile :
+      lineinfile:
         path: /var/www/nextcloud/config/config.php
         state: absent
         regexp: '^$'
+
+#    - name: Remove errantly escaped slashes in nextcloud config...
+#      replace:
+#        path: /var/www/nextcloud/config/config.php
+#        after: 'enabledPreviewProviders'
+#        regexp: '^\s*?(.OC)\\\\(.*?)\\\\(.*?)$'
+#        replace: '\1\\\2\\\3'
 
     - name: Get English-USA docuemnt templates for nextcloud online editor...
       get_url:
@@ -257,3 +266,8 @@
       shell: 'php occ db:convert-filecache-bigint --no-interaction'
       args:
         chdir: /var/www/nextcloud
+
+    - name: Remove CAN_INSTALL file from nextcloud config folder...
+      file:
+        path: /var/www/nextcloud/config/CAN_INSTALL
+        state: absent

@@ -134,4 +134,8 @@ dmypy.json
 
 # Culled scripts
 culled/
+culled/*
+
+# Saved submission data
+form
 

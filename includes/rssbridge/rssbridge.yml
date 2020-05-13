@@ -43,7 +43,7 @@
 
     - name: Set rssbridge ini values...
       vars:
-        default_password: "{{ lookup('password', '~/ansible_defaul-admin-password-for_admin.txt length=32 chars=ascii_letters,digits') }}"
+        default_password: "{{ lookup('password', '~/ansible_default-admin-password-for_admin.txt length=32 chars=ascii_letters,digits') }}"
       ini_file:
         dest: /var/www/rssbridge/config.ini.php
         section: "{{ item.section }}"

@@ -28,20 +28,21 @@
         path: /etc/hostname
         state: touch
 
+    - name: Check hostname presence in /etc/hostname...
+      shell: 'cat /etc/hostname'
+      register: hostname_config
+
     - name: Update remote server hostname file...
       vars:
-        host_name: "{{ lookup('env','TARGET_HOSTNAME') | regex_replace('\\..*?$') }}"
+        config_host_name: "{{ lookup('env','TARGET_HOSTNAME') | regex_replace('\\..*?$') }}"
       replace:
         path: /etc/hostname
         regexp: '^.*?$'
-        replace: "{{ host_name }}"
+        replace: "{{ config_host_name }}"
         backup: true
+      when: hostname_config.stdout == ""
 
     - set_fact:
-        ans_colaptkey: "0C54D189F4BA284D"
-        ans_couchaptkey: "8756C4F765C9AC3CB6B85D62379CE192D401AB61"
-        ans_couchrepo: 'deb https://apache.bintray.com/couchdb-deb bionic main'
-        ans_colrepo: 'deb https://www.collaboraoffice.com/repos/CollaboraOnline/CODE-ubuntu1804 ./'
         ans_mailaddr: "{{ lookup('env','TARGET_EMAILADDR') }}"
         ans_maildomain: "{{ lookup('env','TARGET_EMAILADDR') | regex_replace('[A-Za-z0-9._%+-]+@') }}"
         ans_bounceaddr: "{{ lookup('env','TARGET_BOUNCEADDR') }}"
@@ -97,10 +98,7 @@
       register: dhparam_present
 
     - debug:
-        msg: |
-          "This package generates a new 4096 bit SSL key to make website SSL keys with for increased security. This process can take a long time, so the task will run asynchronously and wait for itself to complete before finishing the server configuration by generating new SSL keys. It is possible, mathematically speaking, for a nation-state level of computing power to compromise the default 1024 or 2048 bit key that ships with the OpenSSL encryption libraries included in most operating systems. Please do not close the terminal window you started this script in, minimize it and let it finish. If the process fails, you will have an invalid (and insecure) /etc/ssl/dhparams.pem file on your server. Delete it manually before running this installation script again with the commands below...
-          ssh server.ip.add.ress
-          sudo rm -rf /etc/ssl/dhparam.pem"
+        msg: "This package generates a new 4096 bit SSL key to make website SSL keys with for increased security. This process can take a long time, so the task will run asynchronously and wait for itself to complete before finishing the server configuration by generating new SSL keys. It is possible, mathematically speaking, for a nation-state level of computing power to compromise the default 1024 or 2048 bit key that ships with the OpenSSL encryption libraries included in most operating systems. Please do not close the terminal window you started this script in, minimize it and let it finish. If the process fails, you will have an invalid (and insecure) /etc/ssl/dhparams.pem file on your server. Delete it manually before running this installation script again with the commands: 'ssh server.ip.add.ress' and 'sudo rm -rf /etc/ssl/dhparam.pem'"
       when: dhparam_present.stat.exists == False
 
     - name: sleep for 30 seconds to let the user read the above message...
@@ -120,15 +118,34 @@
       poll: 0
       register: dhparam_status
 
+    - name: Ensure gpg exists for adding apt keys...
+      apt:
+        name: gpg
+        update_cache: true
+
     - name: Add apt keys for new repositories...
+      vars:
+        ans_colaptkey: "0C54D189F4BA284D"
+        ans_couchaptkey: "8756C4F765C9AC3CB6B85D62379CE192D401AB61"
+        ans_mariakey: "0xF1656F24C74CD1D8"
       apt_key:
         keyserver: keyserver.ubuntu.com
         id: "{{ item.aptkey }}"
       loop:
-        - { aptkey: "{{ ans_colaptkey }}"}
+        - { aptkey: "{{ ans_colaptkey }}" }
         - { aptkey: "{{ ans_couchaptkey }}" }
+        - { aptkey: "{{ ans_mariakey }}" }
 
     - name: Add new repositories to apt sources...
+      vars:
+        ans_couchrepo: 'deb https://apache.bintray.com/couchdb-deb {{ ansible_distribution_release }} main'
+        ans_colrepo: 'deb https://www.collaboraoffice.com/repos/CollaboraOnline/CODE-ubuntu1804 ./'
+        ans_mariarepo_mirone: 'deb [arch=amd64,arm64,ppc64el] http://ftp.utexas.edu/mariadb/repo/10.4/ubuntu {{ ansible_distribution_release }} main'
+        ans_mariarepo_srcone: 'deb-src http://ftp.utexas.edu/mariadb/repo/10.4/ubuntu {{ ansible_distribution_release }} main'
+        ans_mariarepo_mirtwo: 'deb [arch=amd64,arm64,ppc64el] http://mirror.rackspace.com/mariadb/repo/10.4/ubuntu {{ ansible_distribution_release }} main'
+        ans_mariarepo_srctwo: 'deb-src http://mirror.rackspace.com/mariadb/repo/10.4/ubuntu {{ ansible_distribution_release }} main'
+        ans_mariarepo_mirthree: 'deb [arch=amd64,arm64,ppc64el] http://sfo1.mirrors.digitalocean.com/mariadb/repo/10.4/ubuntu {{ ansible_distribution_release }} main'
+        ans_mariarepo_srcthree: 'deb-src http://sfo1.mirrors.digitalocean.com/mariadb/repo/10.4/ubuntu {{ ansible_distribution_release }} main'
       apt_repository:
         repo: "{{ item.repolink }}"
         state: present
@@ -136,30 +153,32 @@
       loop:
         - { repolink: "{{ ans_colrepo }}", file: collabora }
         - { repolink: "{{ ans_couchrepo }}", file: couchdb }
+        - { repolink: "{{ ans_mariarepo_mirone }}", file: mariadb }
+        - { repolink: "{{ ans_mariarepo_srcone }}", file: mariadb }
+        - { repolink: "{{ ans_mariarepo_mirtwo }}", file: mariadb }
+        - { repolink: "{{ ans_mariarepo_srctwo }}", file: mariadb }
+        - { repolink: "{{ ans_mariarepo_srcthree }}", file: mariadb }
+        - { repolink: "{{ ans_mariarepo_mirthree }}", file: mariadb }
 
     - name: Install base requirements...
       apt: 
         name: "{{ item.name }}" 
         update_cache: "{{ true if index == 0 else false }}"
-      loop: 
+      loop:
+        - { name: 'acl' }
         - { name: 'curl' }
         - { name: 'gnupg2' }
         - { name: 'git' }
-        - { name: 'lsb-release' }
         - { name: 'ssl-cert' }
-        - { name: 'ca-certificates' }
         - { name: 'debconf-utils' }
-        - { name: 'fcgiwrap' }
         - { name: 'apt-transport-https' }
         - { name: 'tree' }
         - { name: 'locate' }
         - { name: 'software-properties-common' }
-        - { name: 'dirmngr' }
         - { name: 'screen' }
         - { name: 'htop' }
         - { name: 'net-tools' }
         - { name: 'zip' }
-        - { name: 'unzip' }
         - { name: 'ffmpeg' }
         - { name: 'ghostscript' }
         - { name: 'loolwsd' }
@@ -170,11 +189,9 @@
         - { name: 'msmtp-mta' }
         - { name: 'bsd-mailx' }
         - { name: 'apache2-utils' }
-        - { name: 'git' }
         - { name: 'gcc' }
         - { name: 'make' }
         - { name: 'autoconf' }
-        - { name: 'automake' }
         - { name: 'pkg-config' }
         - { name: 'socat' }
         - { name: 'uuid-dev' }
@@ -184,10 +201,11 @@
 
     - name: Install Nginx...
       apt: 
-        name: "{{ item.name }}" 
+        name: "{{ item.name }}"
         update_cache: false
-      loop: 
-        - { name: 'nginx-common' }
+      loop:
+        - { name: 'nginx' }
+        - { name: 'nginx-extras' }
 
     - name: Install MariaDB...
       apt: 
@@ -197,11 +215,6 @@
     - name: Install Redis...
       apt:
         name: redis-server
-        update_cache: false
-
-    - name: Install CouchDB...
-      apt:
-        name: couchdb
         update_cache: false
 
     - name: Install Apticron...
@@ -215,8 +228,6 @@
         update_cache: false
       loop: 
         - { name: 'python3-pip' }
-        - { name: 'python3-setuptools' }
-        - { name: 'python3-wheel' }
         - { name: 'python3-lxml' }
         - { name: 'python3-psycopg2' }
         - { name: 'python3-pymysql' }
@@ -285,9 +296,6 @@
     - name: Set up redis...
       import_tasks: redis/redis.yml
 
-    - name: Set up acme client and issue SSL certificates...
-      import_tasks: acme/acme.yml
-
     - name: Set up ufw firewall if the user wanted it...
       vars:
         ufw_question: "{{ lookup('env','UFW_ANSWER') }}"
@@ -312,6 +320,9 @@
     - name: Set up apticron...
       import_tasks: apticron/apticron.yml
 
+    - name: Set up couchdb...
+      import_tasks: couchdb/couchdb.yml
+
     - name: Wait until the dhparam key is computed before continuing...
       async_status:
         jid: "{{ dhparam_status.ansible_job_id }}"
@@ -319,6 +330,9 @@
       until: dhparam_result.finished
       delay: 30
       retries: 2880
+
+    - name: Set up acme client and issue SSL certificates...
+      import_tasks: acme/acme.yml
 
     - name: Update systemd services and restart changed ones...
       systemd:
@@ -337,3 +351,4 @@
         - { service: 'mysql' }
       loop_control:
         index_var: index
+

@@ -67,3 +67,9 @@
         group: redis
         mode: 0770
       when: redis_config.changed == true
+
+    - name: Restart redis with new config...
+      systemd:
+        name: 'redis-server'
+        enabled: true
+        state: restarted

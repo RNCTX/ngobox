@@ -1,7 +1,6 @@
     - name: Install ufw...
       apt: 
         name: ufw
-        update_cache: true
 
     - name: Set up ufw firewall...
       ufw:
