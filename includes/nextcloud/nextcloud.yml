@@ -207,13 +207,6 @@
         state: absent
         regexp: '^$'
 
-#    - name: Remove errantly escaped slashes in nextcloud config...
-#      replace:
-#        path: /var/www/nextcloud/config/config.php
-#        after: 'enabledPreviewProviders'
-#        regexp: '^\s*?(.OC)\\\\(.*?)\\\\(.*?)$'
-#        replace: '\1\\\2\\\3'
-
     - name: Get English-USA docuemnt templates for nextcloud online editor...
       get_url:
         url: "{{ item.link }}"
