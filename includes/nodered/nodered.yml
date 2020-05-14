@@ -15,7 +15,7 @@
         dest: /var/nodered/.ssh/authorized_keys
         owner: nodered
         group: nodered
-        mode: 600
+        mode: 0600
 
     - name: Create nodered app folder...
       file:
